@@ -1,4 +1,4 @@
-const CACHE_NAME = 'maintenance-tracker-v2'; // 🔄 Change version to force refresh
+const CACHE_NAME = 'maintenance-tracker-v3'; // 🔄 Change version to force refresh
 const ASSETS = [
   '/',
   '/index.html',
