@@ -82,13 +82,14 @@ function handleScan(cell){
     finishedLogs.push(logEntry);
     delete activeSessions[currentType][cell];
 
-    // Send to Google Sheets
-    fetch(SHEET_WEBAPP_URL, {
-      method: 'POST',
-      body: JSON.stringify(logEntry),
-      headers: { 'Content-Type': 'application/json' }
-    }).then(res => res.text())
-      .then(response => console.log("Google Sheets:", response))
+    // Send to Google Sheets via GET request with URL parameters (avoid CORS issues)
+    const params = new URLSearchParams(logEntry).toString();
+    fetch(`${SHEET_WEBAPP_URL}?${params}`)
+      .then(res => res.text())
+      .then(response => {
+        console.log("Google Sheets:", response);
+        alert("✅ Log sent to Google Sheets");
+      })
       .catch(err => console.error("Google Sheets error:", err));
 
     alert(`⏹️  Stopped ${cell} in ${currentType} • ${dur} min`);
@@ -100,6 +101,7 @@ function handleScan(cell){
   saveState();
   renderLog();
 }
+
 
 function saveState(){
   localStorage.setItem("activeSessions", JSON.stringify(activeSessions));
