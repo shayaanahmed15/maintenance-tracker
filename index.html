@@ -41,8 +41,9 @@
 
 <script>
 const SHEET_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbz7dKDlO_AKxKCh81SawxJC27XdkBRk0zWNJa1P-Z48dMU8MUpeRZHyvu8ynpqjw0jx3w/exec';
+
 let currentType = null;
-let currentUser = null;
+let tempUser = null; // used only for entering name before scanning
 
 const activeSessions = JSON.parse(localStorage.getItem("activeSessions") || "{}");
 const finishedLogs   = JSON.parse(localStorage.getItem("finishedLogs") || "[]");
@@ -53,9 +54,8 @@ function selectType(t){
     alert("User name is required.");
     return;
   }
-
   currentType = t;
-  currentUser = name;
+  tempUser = name;
   document.querySelectorAll(".category").forEach(b => b.classList.toggle("selected", b.textContent.includes(t)));
   document.getElementById("scanBtn").style.display = "inline-block";
 }
@@ -64,7 +64,7 @@ const readerEl = document.getElementById("reader");
 let scanner;
 
 document.getElementById("scanBtn").onclick = () => {
-  if (!currentType || !currentUser) {
+  if (!currentType || !tempUser) {
     alert("Select maintenance type and enter your name first.");
     return;
   }
@@ -83,16 +83,20 @@ function handleScan(cell){
   if (!activeSessions[currentType]) activeSessions[currentType] = {};
 
   const now = new Date();
+
+  // If already started: STOP
   if (activeSessions[currentType][cell]) {
-    const start = new Date(activeSessions[currentType][cell]);
-    const dur   = Math.round((now - start)/60000);
+    const session = activeSessions[currentType][cell];
+    const start = new Date(session.start);
+    const dur   = Math.round((now - start) / 60000);
+    const user  = session.user;
     const comment = prompt("Enter comment (issue, improvement, etc.):") || "";
 
     const logEntry = {
       cell,
       type: currentType,
-      user: currentUser,
-      start: start.toISOString(),
+      user,
+      start: session.start,
       end: now.toISOString(),
       durMin: dur,
       comment
@@ -101,19 +105,23 @@ function handleScan(cell){
     finishedLogs.push(logEntry);
     delete activeSessions[currentType][cell];
 
-    // Send to Google Sheets via GET
+    // Send to Google Sheets
     const url = new URL(SHEET_WEBAPP_URL);
     Object.entries(logEntry).forEach(([k, v]) => url.searchParams.append(k, v));
-
     fetch(url)
       .then(res => res.text())
       .then(response => console.log("Google Sheets:", response))
       .catch(err => console.error("Google Sheets error:", err));
 
-    alert(`⏹️  Stopped ${cell} in ${currentType} • ${dur} min`);
-  } else {
-    activeSessions[currentType][cell] = now.toISOString();
-    alert(`▶️  Started ${cell} in ${currentType}`);
+    alert(`⏹️  Stopped ${cell} in ${currentType} • ${dur} min (User: ${user})`);
+  } 
+  // If not started: START
+  else {
+    activeSessions[currentType][cell] = {
+      start: now.toISOString(),
+      user: tempUser
+    };
+    alert(`▶️  Started ${cell} in ${currentType} (User: ${tempUser})`);
   }
 
   saveState();
@@ -130,14 +138,14 @@ function renderLog(){
   const lines = [];
 
   for (const [type, cells] of Object.entries(activeSessions)) {
-    for (const [cell, start] of Object.entries(cells)) {
-      const elapsed = Math.round((new Date() - new Date(start))/60000);
-      lines.push(`▶️ <b>${cell}</b> (${type}) since ${new Date(start).toLocaleTimeString()} <span class="timestamp">— ${elapsed} min</span>`);
+    for (const [cell, data] of Object.entries(cells)) {
+      const elapsed = Math.round((new Date() - new Date(data.start)) / 60000);
+      lines.push(`▶️ <b>${cell}</b> (${type}) — ${data.user} — ${new Date(data.start).toLocaleTimeString()} <span class="timestamp">• ${elapsed} min</span>`);
     }
   }
 
   finishedLogs.forEach(l => {
-    lines.push(`⏹️ <b>${l.cell}</b> (${l.type}) ${l.durMin} min (${new Date(l.start).toLocaleTimeString()}–${new Date(l.end).toLocaleTimeString()})`);
+    lines.push(`⏹️ <b>${l.cell}</b> (${l.type}) • ${l.durMin} min • ${l.user} (${new Date(l.start).toLocaleTimeString()}–${new Date(l.end).toLocaleTimeString()})`);
   });
 
   div.innerHTML = lines.length ? lines.map(x => `<div>${x}</div>`).join("") : "<em>No records yet.</em>";
@@ -146,7 +154,7 @@ function renderLog(){
 setInterval(renderLog, 30000);
 renderLog();
 
-function clearLogs() {
+function clearLogs(){
   if (confirm("Clear all logs?")) {
     localStorage.clear();
     location.reload();
