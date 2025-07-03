@@ -7,7 +7,6 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon-192.png">
   <meta name="theme-color" content="#2e86c1" />
-
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <style>
@@ -20,7 +19,7 @@
     .success {background:#28a745;color:#fff}
     .category {background:#e67e22;color:#fff}
     .selected {border:2px solid #000}
-    .timestamp {color: #666; font-size: 13px; margin-left: 8px;}
+    .timestamp {color:#666;font-size:13px;margin-left:8px}
   </style>
 </head>
 <body>
@@ -42,7 +41,7 @@
   <div id="log"></div>
 
 <script>
-const SHEET_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyDcdVxrINrMUpmt6piYWGu15MDUmNcDX1J10hHhWlLhBSu6qPPlYtiB8qT1X5cRmPk/exec'; // 🔁 Replace with your deployed Apps Script URL
+const SHEET_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxrSYTnLHP9nwhwX_EYUuioNUuPap9tAbGq9_1jy9-141tTyw5q8l6_iEU2NZdZ61BVOA/exec';
 let currentType = null;
 
 const activeSessions = JSON.parse(localStorage.getItem("activeSessions") || "{}");
@@ -68,7 +67,7 @@ document.getElementById("scanBtn").onclick = () => {
 };
 
 function handleScan(cell){
-  readerEl.style.display="none";
+  readerEl.style.display = "none";
   scanner.stop();
 
   if (!activeSessions[currentType]) activeSessions[currentType] = {};
@@ -77,19 +76,28 @@ function handleScan(cell){
   if (activeSessions[currentType][cell]) {
     const start = new Date(activeSessions[currentType][cell]);
     const dur   = Math.round((now - start)/60000);
-    const logEntry = { cell, type: currentType, start: start.toISOString(), end: now.toISOString(), durMin: dur };
+    const logEntry = {
+      cell,
+      type: currentType,
+      start: start.toISOString(),
+      end: now.toISOString(),
+      durMin: dur
+    };
 
     finishedLogs.push(logEntry);
     delete activeSessions[currentType][cell];
 
-    // Send to Google Sheets via GET request with URL parameters (avoid CORS issues)
-    const params = new URLSearchParams(logEntry).toString();
-    fetch(`${SHEET_WEBAPP_URL}?${params}`)
+    // Send data to Google Sheets via GET
+    const url = new URL(SHEET_WEBAPP_URL);
+    url.searchParams.append("cell", logEntry.cell);
+    url.searchParams.append("type", logEntry.type);
+    url.searchParams.append("start", logEntry.start);
+    url.searchParams.append("end", logEntry.end);
+    url.searchParams.append("durMin", logEntry.durMin);
+
+    fetch(url)
       .then(res => res.text())
-      .then(response => {
-        console.log("Google Sheets:", response);
-        alert("✅ Log sent to Google Sheets");
-      })
+      .then(response => console.log("Google Sheets:", response))
       .catch(err => console.error("Google Sheets error:", err));
 
     alert(`⏹️  Stopped ${cell} in ${currentType} • ${dur} min`);
@@ -101,7 +109,6 @@ function handleScan(cell){
   saveState();
   renderLog();
 }
-
 
 function saveState(){
   localStorage.setItem("activeSessions", JSON.stringify(activeSessions));
@@ -123,29 +130,41 @@ function renderLog(){
     lines.push(`⏹️ <b>${l.cell}</b> (${l.type}) ${l.durMin} min (${new Date(l.start).toLocaleTimeString()}–${new Date(l.end).toLocaleTimeString()})`);
   });
 
-  div.innerHTML = lines.length ? lines.map(x=>`<div>${x}</div>`).join("") : "<em>No records yet.</em>";
+  div.innerHTML = lines.length ? lines.map(x => `<div>${x}</div>`).join("") : "<em>No records yet.</em>";
 }
 
-// 🔁 Live timer updates every 30 seconds
+// Auto-refresh timestamps every 30s
 setInterval(renderLog, 30000);
 renderLog();
 
 document.getElementById("downloadBtn").onclick = () => {
-  if (!finishedLogs.length) { alert("No finished sessions to export."); return; }
+  if (!finishedLogs.length) {
+    alert("No finished sessions to export.");
+    return;
+  }
   const rows = [["Cell","Type","Start ISO","End ISO","Duration (min)"],
                 ...finishedLogs.map(l => [l.cell,l.type,l.start,l.end,l.durMin])];
-  const csv  = rows.map(r => r.join(",")).join("\n");
-  const blob = new Blob([csv], { type:"text/csv" });
-  const a    = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "maintenance_log.csv" });
-  a.click(); URL.revokeObjectURL(a.href);
+  const csv = rows.map(r => r.join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const a = Object.assign(document.createElement("a"), {
+    href: URL.createObjectURL(blob),
+    download: "maintenance_log.csv"
+  });
+  a.click();
+  URL.revokeObjectURL(a.href);
 };
 
-function clearLogs(){
-  if (confirm("Clear all logs?")) { localStorage.clear(); location.reload(); }
+function clearLogs() {
+  if (confirm("Clear all logs?")) {
+    localStorage.clear();
+    location.reload();
+  }
 }
 
-// ✅ Optional: Register service worker
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("service-worker.js").catch(console.error);
+// Register service worker for offline use
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js").catch(console.error);
+}
 </script>
 </body>
 </html>
