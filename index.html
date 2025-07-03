@@ -32,23 +32,30 @@
     <button onclick="selectType('Weekly Service/Mould Maintenance')" class="category">Weekly Service/Mould Maintenance</button>
   </div>
 
-  <!-- Scan / Download -->
+  <!-- Scan / Clear -->
   <button id="scanBtn" class="primary" style="display:none">📷 Scan QR</button>
-  <button id="downloadBtn" class="success">⬇️ Download CSV</button>
   <button onclick="clearLogs()" style="background:#dc3545;color:#fff">🗑️ Clear All</button>
 
   <div id="reader"></div>
   <div id="log"></div>
 
 <script>
-const SHEET_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbzMKDASDcEyFSNsRUra6JP7MP9yX5FrJpIUvZGpydZ0o6g6qg0AE320o6eivSUalE7xvw/exec';
+const SHEET_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxrSYTnLHP9nwhwX_EYUuioNUuPap9tAbGq9_1jy9-141tTyw5q8l6_iEU2NZdZ61BVOA/exec';
 let currentType = null;
+let currentUser = null;
 
 const activeSessions = JSON.parse(localStorage.getItem("activeSessions") || "{}");
 const finishedLogs   = JSON.parse(localStorage.getItem("finishedLogs") || "[]");
 
 function selectType(t){
+  const name = prompt("Enter your name:");
+  if (!name) {
+    alert("User name is required.");
+    return;
+  }
+
   currentType = t;
+  currentUser = name;
   document.querySelectorAll(".category").forEach(b => b.classList.toggle("selected", b.textContent.includes(t)));
   document.getElementById("scanBtn").style.display = "inline-block";
 }
@@ -57,7 +64,10 @@ const readerEl = document.getElementById("reader");
 let scanner;
 
 document.getElementById("scanBtn").onclick = () => {
-  if (!currentType) { alert("Select a maintenance category first."); return; }
+  if (!currentType || !currentUser) {
+    alert("Select maintenance type and enter your name first.");
+    return;
+  }
   readerEl.style.display = "block";
   if (!scanner) scanner = new Html5Qrcode("reader");
   scanner.start({ facingMode:"environment" }, { fps:10, qrbox:250 },
@@ -76,24 +86,24 @@ function handleScan(cell){
   if (activeSessions[currentType][cell]) {
     const start = new Date(activeSessions[currentType][cell]);
     const dur   = Math.round((now - start)/60000);
+    const comment = prompt("Enter comment (issue, improvement, etc.):") || "";
+
     const logEntry = {
       cell,
       type: currentType,
+      user: currentUser,
       start: start.toISOString(),
       end: now.toISOString(),
-      durMin: dur
+      durMin: dur,
+      comment
     };
 
     finishedLogs.push(logEntry);
     delete activeSessions[currentType][cell];
 
-    // Send data to Google Sheets via GET
+    // Send to Google Sheets via GET
     const url = new URL(SHEET_WEBAPP_URL);
-    url.searchParams.append("cell", logEntry.cell);
-    url.searchParams.append("type", logEntry.type);
-    url.searchParams.append("start", logEntry.start);
-    url.searchParams.append("end", logEntry.end);
-    url.searchParams.append("durMin", logEntry.durMin);
+    Object.entries(logEntry).forEach(([k, v]) => url.searchParams.append(k, v));
 
     fetch(url)
       .then(res => res.text())
@@ -133,26 +143,8 @@ function renderLog(){
   div.innerHTML = lines.length ? lines.map(x => `<div>${x}</div>`).join("") : "<em>No records yet.</em>";
 }
 
-// Auto-refresh timestamps every 30s
 setInterval(renderLog, 30000);
 renderLog();
-
-document.getElementById("downloadBtn").onclick = () => {
-  if (!finishedLogs.length) {
-    alert("No finished sessions to export.");
-    return;
-  }
-  const rows = [["Cell","Type","Start ISO","End ISO","Duration (min)"],
-                ...finishedLogs.map(l => [l.cell,l.type,l.start,l.end,l.durMin])];
-  const csv = rows.map(r => r.join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const a = Object.assign(document.createElement("a"), {
-    href: URL.createObjectURL(blob),
-    download: "maintenance_log.csv"
-  });
-  a.click();
-  URL.revokeObjectURL(a.href);
-};
 
 function clearLogs() {
   if (confirm("Clear all logs?")) {
@@ -161,7 +153,6 @@ function clearLogs() {
   }
 }
 
-// Register service worker for offline use
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("service-worker.js").catch(console.error);
 }
