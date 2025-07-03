@@ -2,7 +2,6 @@ const CACHE_NAME = 'maintenance-tracker-v3'; // 🔄 Change version to force ref
 const ASSETS = [
   '/',
   '/index.html',
-  '/html5-qrcode.min.js',
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png'
