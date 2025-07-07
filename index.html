@@ -19,7 +19,7 @@
     .success {background:#28a745;color:#fff}
     .category {background:#e67e22;color:#fff}
     .selected {border:2px solid #000}
-    .timestamp {color:#666;font-size:13px;margin-left:8px}
+    .timestamp {color: #666; font-size: 13px; margin-left: 8px;}
   </style>
 </head>
 <body>
@@ -40,12 +40,11 @@
   <div id="log"></div>
 
 <script>
-const SHEET_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbz7dKDlO_AKxKCh81SawxJC27XdkBRk0zWNJa1P-Z48dMU8MUpeRZHyvu8ynpqjw0jx3w/exec';
+const SHEET_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxrSYTnLHP9nwhwX_EYUuioNUuPap9tAbGq9_1jy9-141tTyw5q8l6_iEU2NZdZ61BVOA/exec';
 
 let currentType = null;
-
 const activeSessions = JSON.parse(localStorage.getItem("activeSessions") || "{}");
-const finishedLogs   = JSON.parse(localStorage.getItem("finishedLogs") || "[]");
+const finishedLogs = JSON.parse(localStorage.getItem("finishedLogs") || "[]");
 
 function selectType(t){
   currentType = t;
@@ -59,8 +58,8 @@ const readerEl = document.getElementById("reader");
 let scanner;
 
 document.getElementById("scanBtn").onclick = () => {
-  if (!currentType || !tempUser) {
-    alert("Select maintenance type and enter your name first.");
+  if (!currentType) {
+    alert("Select a maintenance category first.");
     return;
   }
   readerEl.style.display = "block";
@@ -68,10 +67,10 @@ document.getElementById("scanBtn").onclick = () => {
   scanner.start({ facingMode:"environment" }, { fps:10, qrbox:250 },
     txt => handleScan(txt.trim()),
     () => {}
-  ).catch(e => alert("Camera error: "+e));
+  ).catch(e => alert("Camera error: " + e));
 };
 
-function handleScan(cell) {
+function handleScan(cell){
   readerEl.style.display = "none";
   scanner.stop();
 
@@ -80,7 +79,7 @@ function handleScan(cell) {
   const now = new Date();
 
   if (activeSessions[currentType][cell]) {
-    // 🛑 Stop existing session
+    // ⏹️ Stop session
     const session = activeSessions[currentType][cell];
     const start = new Date(session.start);
     const dur = Math.round((now - start) / 60000);
@@ -109,8 +108,9 @@ function handleScan(cell) {
       .catch(err => console.error("Google Sheets error:", err));
 
     alert(`⏹️  Stopped ${cell} in ${currentType} • ${dur} min (User: ${user})`);
+
   } else {
-    // ▶️ Start new session
+    // ▶️ Start session
     const name = prompt(`Enter your name for ${cell} in ${currentType}:`);
     if (!name) {
       alert("User name is required.");
@@ -131,7 +131,7 @@ function handleScan(cell) {
 
 function saveState(){
   localStorage.setItem("activeSessions", JSON.stringify(activeSessions));
-  localStorage.setItem("finishedLogs",   JSON.stringify(finishedLogs));
+  localStorage.setItem("finishedLogs", JSON.stringify(finishedLogs));
 }
 
 function renderLog(){
@@ -139,14 +139,14 @@ function renderLog(){
   const lines = [];
 
   for (const [type, cells] of Object.entries(activeSessions)) {
-    for (const [cell, data] of Object.entries(cells)) {
-      const elapsed = Math.round((new Date() - new Date(data.start)) / 60000);
-      lines.push(`▶️ <b>${cell}</b> (${type}) — ${data.user} — ${new Date(data.start).toLocaleTimeString()} <span class="timestamp">• ${elapsed} min</span>`);
+    for (const [cell, session] of Object.entries(cells)) {
+      const elapsed = Math.round((new Date() - new Date(session.start)) / 60000);
+      lines.push(`▶️ <b>${cell}</b> (${type}) since ${new Date(session.start).toLocaleTimeString()} <span class="timestamp">— ${elapsed} min</span> — ${session.user}`);
     }
   }
 
   finishedLogs.forEach(l => {
-    lines.push(`⏹️ <b>${l.cell}</b> (${l.type}) • ${l.durMin} min • ${l.user} (${new Date(l.start).toLocaleTimeString()}–${new Date(l.end).toLocaleTimeString()})`);
+    lines.push(`⏹️ <b>${l.cell}</b> (${l.type}) ${l.durMin} min (${new Date(l.start).toLocaleTimeString()}–${new Date(l.end).toLocaleTimeString()}) — ${l.user}`);
   });
 
   div.innerHTML = lines.length ? lines.map(x => `<div>${x}</div>`).join("") : "<em>No records yet.</em>";
