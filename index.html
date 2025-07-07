@@ -8,7 +8,6 @@
   <link rel="icon" href="icon-192.png">
   <meta name="theme-color" content="#2e86c1" />
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-
   <style>
     body {font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:20px;background:#f5f7fa;color:#333}
     h2 {text-align:center}
@@ -24,33 +23,39 @@
 </head>
 <body>
   <h2>Maintenance Time Tracker</h2>
-
-  <!-- Type Selection -->
   <div>
     <button onclick="selectType('Preventive Maintenance')" class="category">Preventive Maintenance</button>
     <button onclick="selectType('Breakdown')" class="category">Breakdown</button>
     <button onclick="selectType('Weekly Service/Mould Maintenance')" class="category">Weekly Service/Mould Maintenance</button>
   </div>
-
-  <!-- Scan / Clear -->
   <button id="scanBtn" class="primary" style="display:none">📷 Scan QR</button>
   <button onclick="clearLogs()" style="background:#dc3545;color:#fff">🗑️ Clear All</button>
-
   <div id="reader"></div>
   <div id="log"></div>
 
 <script>
 const SHEET_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbz7dKDlO_AKxKCh81SawxJC27XdkBRk0zWNJa1P-Z48dMU8MUpeRZHyvu8ynpqjw0jx3w/exec';
-
 let currentType = null;
+let currentUser = null;
+let currentComment = null;
+let validCells = [];
 const activeSessions = JSON.parse(localStorage.getItem("activeSessions") || "{}");
-const finishedLogs = JSON.parse(localStorage.getItem("finishedLogs") || "[]");
+const finishedLogs   = JSON.parse(localStorage.getItem("finishedLogs") || "[]");
+
+fetch(SHEET_WEBAPP_URL)
+  .then(res => res.json())
+  .then(data => {
+    validCells = data.map(row => row["QR Code"] || row["Cell Name"]);
+    console.log("Valid cells loaded:", validCells);
+  })
+  .catch(err => console.error("Failed to load cell list:", err));
 
 function selectType(t){
   currentType = t;
-  document.querySelectorAll(".category").forEach(b =>
-    b.classList.toggle("selected", b.textContent.includes(t))
-  );
+  document.querySelectorAll(".category").forEach(b => b.classList.toggle("selected", b.textContent.includes(t)));
+  if (!currentUser || !Object.values(activeSessions[t] || {}).length) {
+    currentUser = prompt("Enter your name:");
+  }
   document.getElementById("scanBtn").style.display = "inline-block";
 }
 
@@ -58,8 +63,8 @@ const readerEl = document.getElementById("reader");
 let scanner;
 
 document.getElementById("scanBtn").onclick = () => {
-  if (!currentType) {
-    alert("Select a maintenance category first.");
+  if (!currentType || !currentUser) {
+    alert("Please select a maintenance category and enter your name first.");
     return;
   }
   readerEl.style.display = "block";
@@ -67,30 +72,32 @@ document.getElementById("scanBtn").onclick = () => {
   scanner.start({ facingMode:"environment" }, { fps:10, qrbox:250 },
     txt => handleScan(txt.trim()),
     () => {}
-  ).catch(e => alert("Camera error: " + e));
+  ).catch(e => alert("Camera error: "+e));
 };
 
 function handleScan(cell){
-  readerEl.style.display = "none";
+  readerEl.style.display="none";
   scanner.stop();
+
+  if (!validCells.includes(cell)) {
+    alert(`❌ Unknown or unauthorized cell: ${cell}`);
+    return;
+  }
 
   if (!activeSessions[currentType]) activeSessions[currentType] = {};
 
   const now = new Date();
-
   if (activeSessions[currentType][cell]) {
-    // ⏹️ Stop session
-    const session = activeSessions[currentType][cell];
-    const start = new Date(session.start);
-    const dur = Math.round((now - start) / 60000);
-    const user = session.user;
-    const comment = prompt("Enter comment (issue, problem, or improvement):") || "";
+    const start = new Date(activeSessions[currentType][cell].start);
+    const user = activeSessions[currentType][cell].user;
+    const dur = Math.round((now - start)/60000);
+    const comment = prompt("Add a comment (optional):") || "N/A";
 
     const logEntry = {
       cell,
       type: currentType,
       user,
-      start: session.start,
+      start: start.toISOString(),
       end: now.toISOString(),
       durMin: dur,
       comment
@@ -99,30 +106,19 @@ function handleScan(cell){
     finishedLogs.push(logEntry);
     delete activeSessions[currentType][cell];
 
-    // Send to Google Sheets
-    const url = new URL(SHEET_WEBAPP_URL);
-    Object.entries(logEntry).forEach(([k, v]) => url.searchParams.append(k, v));
+    const url = `${SHEET_WEBAPP_URL}?` + new URLSearchParams(logEntry).toString();
     fetch(url)
       .then(res => res.text())
       .then(response => console.log("Google Sheets:", response))
       .catch(err => console.error("Google Sheets error:", err));
 
-    alert(`⏹️  Stopped ${cell} in ${currentType} • ${dur} min (User: ${user})`);
-
+    alert(`⏹️  Stopped ${cell} • ${dur} min`);
   } else {
-    // ▶️ Start session
-    const name = prompt(`Enter your name for ${cell} in ${currentType}:`);
-    if (!name) {
-      alert("User name is required.");
-      return;
-    }
-
     activeSessions[currentType][cell] = {
       start: now.toISOString(),
-      user: name
+      user: currentUser
     };
-
-    alert(`▶️  Started ${cell} in ${currentType} (User: ${name})`);
+    alert(`▶️  Started ${cell} in ${currentType}`);
   }
 
   saveState();
@@ -139,33 +135,32 @@ function renderLog(){
   const lines = [];
 
   for (const [type, cells] of Object.entries(activeSessions)) {
-    for (const [cell, session] of Object.entries(cells)) {
-      const elapsed = Math.round((new Date() - new Date(session.start)) / 60000);
-      lines.push(`▶️ <b>${cell}</b> (${type}) since ${new Date(session.start).toLocaleTimeString()} <span class="timestamp">— ${elapsed} min</span> — ${session.user}`);
+    for (const [cell, info] of Object.entries(cells)) {
+      const elapsed = Math.round((new Date() - new Date(info.start))/60000);
+      lines.push(`▶️ <b>${cell}</b> (${type}) by ${info.user} since ${new Date(info.start).toLocaleTimeString()} <span class="timestamp">— ${elapsed} min</span>`);
     }
   }
 
   finishedLogs.forEach(l => {
-    lines.push(`⏹️ <b>${l.cell}</b> (${l.type}) ${l.durMin} min (${new Date(l.start).toLocaleTimeString()}–${new Date(l.end).toLocaleTimeString()}) — ${l.user}`);
+    lines.push(`⏹️ <b>${l.cell}</b> (${l.type}) by ${l.user} ${l.durMin} min (${new Date(l.start).toLocaleTimeString()}–${new Date(l.end).toLocaleTimeString()}) — <i>${l.comment}</i>`);
   });
 
-  div.innerHTML = lines.length ? lines.map(x => `<div>${x}</div>`).join("") : "<em>No records yet.</em>";
+  div.innerHTML = lines.length ? lines.map(x=>`<div>${x}</div>`).join("") : "<em>No records yet.</em>";
 }
 
 setInterval(renderLog, 30000);
 renderLog();
 
+document.getElementById("downloadBtn")?.remove(); // Remove CSV download button
+
 function clearLogs(){
   if (confirm("Clear finished logs? Ongoing sessions will be kept.")) {
-    localStorage.setItem("finishedLogs", JSON.stringify([])); // clear only finished
-    // do NOT clear activeSessions
-    renderLog(); // re-render log area
+    localStorage.setItem("finishedLogs", JSON.stringify([]));
+    renderLog();
   }
 }
 
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js").catch(console.error);
-}
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("service-worker.js").catch(console.error);
 </script>
 </body>
 </html>
