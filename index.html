@@ -48,16 +48,25 @@ let tempUser = null; // used only for entering name before scanning
 const activeSessions = JSON.parse(localStorage.getItem("activeSessions") || "{}");
 const finishedLogs   = JSON.parse(localStorage.getItem("finishedLogs") || "[]");
 
+function selectType(){
+  let currentType = null;
+  let currentUser = null; // ✅ store the user name globally
+
 function selectType(t){
-  const name = prompt("Enter your name:");
-  if (!name) {
-    alert("User name is required.");
-    return;
+  if (!currentUser) {
+    const name = prompt("Enter your name:");
+    if (!name) {
+      alert("User name is required.");
+      return;
+    }
+    currentUser = name; // 🔒 store it only once
   }
+
   currentType = t;
-  tempUser = name;
   document.querySelectorAll(".category").forEach(b => b.classList.toggle("selected", b.textContent.includes(t)));
   document.getElementById("scanBtn").style.display = "inline-block";
+}
+
 }
 
 const readerEl = document.getElementById("reader");
@@ -84,13 +93,13 @@ function handleScan(cell){
 
   const now = new Date();
 
-  // If already started: STOP
   if (activeSessions[currentType][cell]) {
+    // Stop the session
     const session = activeSessions[currentType][cell];
     const start = new Date(session.start);
-    const dur   = Math.round((now - start) / 60000);
-    const user  = session.user;
-    const comment = prompt("Enter comment (issue, improvement, etc.):") || "";
+    const dur = Math.round((now - start) / 60000);
+    const user = session.user; // ✅ get the stored name
+    const comment = prompt("Enter comment (issue, problem, or improvement):") || "";
 
     const logEntry = {
       cell,
@@ -114,14 +123,14 @@ function handleScan(cell){
       .catch(err => console.error("Google Sheets error:", err));
 
     alert(`⏹️  Stopped ${cell} in ${currentType} • ${dur} min (User: ${user})`);
-  } 
-  // If not started: START
-  else {
+
+  } else {
+    // Start a new session
     activeSessions[currentType][cell] = {
       start: now.toISOString(),
-      user: tempUser
+      user: currentUser // ✅ Save user's name with session
     };
-    alert(`▶️  Started ${cell} in ${currentType} (User: ${tempUser})`);
+    alert(`▶️  Started ${cell} in ${currentType}`);
   }
 
   saveState();
