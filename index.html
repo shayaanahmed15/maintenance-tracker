@@ -156,9 +156,10 @@ setInterval(renderLog, 30000);
 renderLog();
 
 function clearLogs(){
-  if (confirm("Clear all logs?")) {
-    localStorage.clear();
-    location.reload();
+  if (confirm("Clear finished logs? Ongoing sessions will be kept.")) {
+    localStorage.setItem("finishedLogs", JSON.stringify([])); // clear only finished
+    // do NOT clear activeSessions
+    renderLog(); // re-render log area
   }
 }
 
