@@ -1,4 +1,5 @@
-const CACHE_NAME = 'maintenance-tracker-v3'; // 🔄 Change version to force refresh
+const CACHE_NAME = 'maintenance-tracker-v4'; // 🔄 Bumped version
+
 const ASSETS = [
   '/',
   '/index.html',
@@ -11,10 +12,12 @@ const ASSETS = [
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(ASSETS);
+      return cache.addAll(ASSETS).catch(err => {
+        console.warn("Failed to cache assets:", err);
+      });
     })
   );
-  self.skipWaiting(); // 💡 Force worker to activate immediately
+  self.skipWaiting();
 });
 
 // Delete old caches
