@@ -43,30 +43,16 @@
 const SHEET_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbz7dKDlO_AKxKCh81SawxJC27XdkBRk0zWNJa1P-Z48dMU8MUpeRZHyvu8ynpqjw0jx3w/exec';
 
 let currentType = null;
-let tempUser = null; // used only for entering name before scanning
 
 const activeSessions = JSON.parse(localStorage.getItem("activeSessions") || "{}");
 const finishedLogs   = JSON.parse(localStorage.getItem("finishedLogs") || "[]");
 
-function selectType(){
-  let currentType = null;
-  let currentUser = null; // ✅ store the user name globally
-
 function selectType(t){
-  if (!currentUser) {
-    const name = prompt("Enter your name:");
-    if (!name) {
-      alert("User name is required.");
-      return;
-    }
-    currentUser = name; // 🔒 store it only once
-  }
-
   currentType = t;
-  document.querySelectorAll(".category").forEach(b => b.classList.toggle("selected", b.textContent.includes(t)));
+  document.querySelectorAll(".category").forEach(b =>
+    b.classList.toggle("selected", b.textContent.includes(t))
+  );
   document.getElementById("scanBtn").style.display = "inline-block";
-}
-
 }
 
 const readerEl = document.getElementById("reader");
@@ -85,7 +71,7 @@ document.getElementById("scanBtn").onclick = () => {
   ).catch(e => alert("Camera error: "+e));
 };
 
-function handleScan(cell){
+function handleScan(cell) {
   readerEl.style.display = "none";
   scanner.stop();
 
@@ -94,11 +80,11 @@ function handleScan(cell){
   const now = new Date();
 
   if (activeSessions[currentType][cell]) {
-    // Stop the session
+    // 🛑 Stop existing session
     const session = activeSessions[currentType][cell];
     const start = new Date(session.start);
     const dur = Math.round((now - start) / 60000);
-    const user = session.user; // ✅ get the stored name
+    const user = session.user;
     const comment = prompt("Enter comment (issue, problem, or improvement):") || "";
 
     const logEntry = {
@@ -123,14 +109,20 @@ function handleScan(cell){
       .catch(err => console.error("Google Sheets error:", err));
 
     alert(`⏹️  Stopped ${cell} in ${currentType} • ${dur} min (User: ${user})`);
-
   } else {
-    // Start a new session
+    // ▶️ Start new session
+    const name = prompt(`Enter your name for ${cell} in ${currentType}:`);
+    if (!name) {
+      alert("User name is required.");
+      return;
+    }
+
     activeSessions[currentType][cell] = {
       start: now.toISOString(),
-      user: currentUser // ✅ Save user's name with session
+      user: name
     };
-    alert(`▶️  Started ${cell} in ${currentType}`);
+
+    alert(`▶️  Started ${cell} in ${currentType} (User: ${name})`);
   }
 
   saveState();
