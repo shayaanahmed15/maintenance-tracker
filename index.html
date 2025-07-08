@@ -136,7 +136,7 @@ renderLog();
 setInterval(renderLog, 30000);
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js").catch(console.error);
+  navigator.serviceWorker.register('./service-worker.js').catch(console.error);
 }
 </script>
 </body>
