@@ -2,170 +2,102 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Maintenance Time Tracker</title>
-  <link rel="manifest" href="manifest.json">
-  <link rel="icon" href="icon-192.png">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Maintenance Tracker</title>
+  <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#2e86c1" />
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-
+  <link rel="icon" href="icon-192.png" />
+  <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
-    body {font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:20px;background:#f5f7fa;color:#333}
-    h2 {text-align:center}
-    #reader {width:100%;max-width:320px;margin:20px auto;display:none}
-    button {padding:12px 18px;margin:6px;border:none;border-radius:6px;font-size:16px;cursor:pointer}
-    #log {margin-top:20px;font-size:14px;max-height:300px;overflow-y:auto;background:#fff;border:1px solid #ccc;padding:8px;border-radius:6px}
-    .primary {background:#2e86c1;color:#fff}
-    .success {background:#28a745;color:#fff}
-    .category {background:#e67e22;color:#fff}
-    .selected {border:2px solid #000}
-    .timestamp {color: #666; font-size: 13px; margin-left: 8px;}
+    body { font-family: Arial; padding: 20px; max-width: 480px; margin: auto; background: #f5f7fa; }
+    button { margin: 6px; padding: 10px 15px; font-size: 16px; border: none; border-radius: 5px; cursor: pointer; }
+    .primary { background: #2e86c1; color: white; }
+    .category { background: #e67e22; color: white; }
+    .selected { border: 2px solid black; }
+    #reader { display: none; max-width: 320px; margin: 10px auto; }
+    #log { font-size: 14px; margin-top: 20px; background: #fff; padding: 10px; border-radius: 6px; border: 1px solid #ccc; max-height: 300px; overflow-y: auto; }
   </style>
 </head>
 <body>
   <h2>Maintenance Time Tracker</h2>
 
-  <!-- Type Selection -->
   <div>
-    <button onclick="selectType('Preventive Maintenance')" class="category">Preventive Maintenance</button>
-    <button onclick="selectType('Breakdown')" class="category">Breakdown</button>
-    <button onclick="selectType('Weekly Service/Mould Maintenance')" class="category">Weekly Service/Mould Maintenance</button>
+    <button class="category" onclick="selectType('Preventive Maintenance')">Preventive Maintenance</button>
+    <button class="category" onclick="selectType('Breakdown')">Breakdown</button>
+    <button class="category" onclick="selectType('Weekly Service/Mould Maintenance')">Weekly Service/Mould Maintenance</button>
   </div>
 
-  <!-- Scan / Clear -->
   <button id="scanBtn" class="primary" style="display:none">📷 Scan QR</button>
-  <button onclick="clearLogs()" style="background:#dc3545;color:#fff">🗑️ Clear All</button>
+  <button onclick="clearLogs()" style="background:#dc3545; color:white">🗑️ Clear Logs</button>
 
   <div id="reader"></div>
   <div id="log"></div>
 
 <script>
-const SHEET_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbzqoyp02-d7SZZEQopGn1UGxAphzRC7qYoZi1t0z0SIsiA6WerHviVcKyAipLsCxITm-g/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwqH0XukNu2hBpw4jhFRm08z9AMIeDIG3IMF7fsCTaX_3AzCcsh49Wj38HpSPZIz6R12g/exec'; // Replace with your Web App URL
+let currentType = null, currentUser = null, validCells = [], scanner = null;
 
-let currentType = null;
-const activeSessions = JSON.parse(localStorage.getItem("activeSessions") || "{}");
-const finishedLogs = JSON.parse(localStorage.getItem("finishedLogs") || "[]");
+const readerEl = document.getElementById("reader");
 
-function selectType(t){
-  currentType = t;
+fetch(`${SCRIPT_URL}?action=getValidCells`)
+  .then(res => res.json())
+  .then(data => {
+    validCells = data.map(row => row["QR Code"] || row["Cell Name"]);
+    console.log("Valid cells loaded:", validCells);
+  })
+  .catch(err => alert("Failed to load valid cells"));
+
+function selectType(type) {
+  currentType = type;
   document.querySelectorAll(".category").forEach(b =>
-    b.classList.toggle("selected", b.textContent.includes(t))
+    b.classList.toggle("selected", b.textContent.includes(type))
   );
+
+  if (!currentUser) {
+    currentUser = prompt("Enter your name:");
+    if (!currentUser) return;
+  }
+
   document.getElementById("scanBtn").style.display = "inline-block";
 }
 
-const readerEl = document.getElementById("reader");
-let scanner;
-
 document.getElementById("scanBtn").onclick = () => {
-  if (!currentType) {
-    alert("Select a maintenance category first.");
-    return;
-  }
+  if (!currentType || !currentUser) return alert("Choose type and enter name first");
+
   readerEl.style.display = "block";
   if (!scanner) scanner = new Html5Qrcode("reader");
-  scanner.start({ facingMode:"environment" }, { fps:10, qrbox:250 },
+
+  scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 },
     txt => handleScan(txt.trim()),
-    () => {}
+    err => console.warn(err)
   ).catch(e => alert("Camera error: " + e));
 };
 
-function handleScan(cell){
+function handleScan(cell) {
   readerEl.style.display = "none";
   scanner.stop();
 
-  if (!activeSessions[currentType]) activeSessions[currentType] = {};
+  if (!validCells.includes(cell)) return alert("Unknown cell: " + cell);
 
-  const now = new Date();
-
-  if (activeSessions[currentType][cell]) {
-    // ⏹️ Stop session
-    const session = activeSessions[currentType][cell];
-    const start = new Date(session.start);
-    const dur = Math.round((now - start) / 60000);
-    const user = session.user;
-    const comment = prompt("Enter comment (issue, problem, or improvement):") || "";
-
-    const logEntry = {
-      cell,
-      type: currentType,
-      user,
-      start: session.start,
-      end: now.toISOString(),
-      durMin: dur,
-      comment
-    };
-
-    finishedLogs.push(logEntry);
-    delete activeSessions[currentType][cell];
-
-    // Send to Google Sheets
-    const url = new URL(SHEET_WEBAPP_URL);
-    Object.entries(logEntry).forEach(([k, v]) => url.searchParams.append(k, v));
-    fetch(url)
-      .then(res => res.text())
-      .then(response => console.log("Google Sheets:", response))
-      .catch(err => console.error("Google Sheets error:", err));
-
-    alert(`⏹️  Stopped ${cell} in ${currentType} • ${dur} min (User: ${user})`);
-
-  } else {
-    // ▶️ Start session
-    const name = prompt(`Enter your name for ${cell} in ${currentType}:`);
-    if (!name) {
-      alert("User name is required.");
-      return;
-    }
-
-    activeSessions[currentType][cell] = {
-      start: now.toISOString(),
-      user: name
-    };
-
-    alert(`▶️  Started ${cell} in ${currentType} (User: ${name})`);
-  }
-
-  saveState();
-  renderLog();
+  fetch(`${SCRIPT_URL}?action=endSession&cell=${encodeURIComponent(cell)}&type=${encodeURIComponent(currentType)}&comment=${encodeURIComponent(prompt("Enter comment or issue (optional):") || "N/A")}`)
+    .then(res => res.text())
+    .then(text => {
+      if (text.includes("No active session")) {
+        // Start new session
+        return fetch(`${SCRIPT_URL}?action=startSession&cell=${encodeURIComponent(cell)}&type=${encodeURIComponent(currentType)}&user=${encodeURIComponent(currentUser)}`)
+          .then(r => r.text()).then(alert);
+      } else {
+        alert(text);
+      }
+    })
+    .catch(err => console.error("Error:", err));
 }
 
-function saveState(){
-  localStorage.setItem("activeSessions", JSON.stringify(activeSessions));
-  localStorage.setItem("finishedLogs", JSON.stringify(finishedLogs));
+function clearLogs() {
+  if (confirm("Clear local logs?")) document.getElementById("log").innerHTML = "<em>No logs yet.</em>";
 }
 
-function renderLog(){
-  const div = document.getElementById("log");
-  const lines = [];
-
-  for (const [type, cells] of Object.entries(activeSessions)) {
-    for (const [cell, session] of Object.entries(cells)) {
-      const elapsed = Math.round((new Date() - new Date(session.start)) / 60000);
-      lines.push(`▶️ <b>${cell}</b> (${type}) since ${new Date(session.start).toLocaleTimeString()} <span class="timestamp">— ${elapsed} min</span> — ${session.user}`);
-    }
-  }
-
-  finishedLogs.forEach(l => {
-    lines.push(`⏹️ <b>${l.cell}</b> (${l.type}) ${l.durMin} min (${new Date(l.start).toLocaleTimeString()}–${new Date(l.end).toLocaleTimeString()}) — ${l.user}`);
-  });
-
-  div.innerHTML = lines.length ? lines.map(x => `<div>${x}</div>`).join("") : "<em>No records yet.</em>";
-}
-
-setInterval(renderLog, 30000);
-renderLog();
-
-function clearLogs(){
-  if (confirm("Clear finished logs? Ongoing sessions will be kept.")) {
-    localStorage.setItem("finishedLogs", JSON.stringify([])); // clear only finished
-    // do NOT clear activeSessions
-    renderLog(); // re-render log area
-  }
-}
-
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js").catch(console.error);
-}
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("service-worker.js").catch(console.error);
 </script>
 </body>
 </html>
