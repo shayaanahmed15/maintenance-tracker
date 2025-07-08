@@ -1,11 +1,11 @@
 const CACHE_NAME = 'maintenance-tracker-v4'; // 🔄 Bumped version
 
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png'
+  './',
+  './index.html',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png'
 ];
 
 // Install and cache new version
